@@ -14,17 +14,13 @@ export default function HomePage() {
   const [allowed, setAllowed] = useState(false)
   const [userData, setUserData] = useState<UserData | null>(null)
   const [telegramName, setTelegramName] = useState('')
-  const [showRegister, setShowRegister] = useState(false)
 
   useEffect(() => {
     async function checkAccess() {
       setLoading(true)
 
       try {
-        const tg =
-          typeof window !== 'undefined'
-            ? (window as any)?.Telegram?.WebApp
-            : null
+        const tg = (window as any)?.Telegram?.WebApp
 
         tg?.ready?.()
         tg?.expand?.()
@@ -52,7 +48,6 @@ export default function HomePage() {
 
         if (error || !data) {
           setAllowed(false)
-          setShowRegister(true)
           setLoading(false)
           return
         }
@@ -66,7 +61,6 @@ export default function HomePage() {
 
       } catch (error) {
         setAllowed(false)
-        setShowRegister(true)
       } finally {
         setLoading(false)
       }
@@ -74,40 +68,6 @@ export default function HomePage() {
 
     checkAccess()
   }, [])
-
-  const handleRegister = async () => {
-    const tg = (window as any)?.Telegram?.WebApp
-    const telegramUser = tg?.initDataUnsafe?.user
-
-    if (!telegramUser?.id) return
-
-    setLoading(true)
-
-    try {
-      const { error } = await supabase
-        .from('users')
-        .insert({
-          telegram_id: Number(telegramUser.id),
-          role: 'user',
-          location: 'Не указана',
-          active: true,
-          telegram_name: telegramUser.first_name || telegramUser.username || 'User'
-        })
-
-      if (!error) {
-        setAllowed(true)
-        setShowRegister(false)
-        setUserData({
-          role: 'user',
-          location: 'Не указана',
-        })
-      }
-    } catch (err) {
-      console.error('Ошибка регистрации:', err)
-    } finally {
-      setLoading(false)
-    }
-  }
 
   if (loading) {
     return (
@@ -120,32 +80,13 @@ export default function HomePage() {
     )
   }
 
-  if (!allowed && showRegister) {
-    return (
-      <main className="min-h-screen bg-black text-white flex items-center justify-center p-6">
-        <div className="bg-zinc-900 border border-zinc-800 rounded-3xl p-6 text-center max-w-sm w-full">
-          <div className="text-5xl mb-4">☕</div>
-          <h1 className="text-3xl font-bold mb-3">FORREST HUB</h1>
-          <p className="text-zinc-400 mb-2">Привет, {telegramName}!</p>
-          <p className="text-zinc-400 mb-6">Твой аккаунт ещё не зарегистрирован</p>
-          <button
-            onClick={handleRegister}
-            className="bg-white text-black font-bold py-3 px-6 rounded-xl w-full hover:bg-zinc-200 transition-colors"
-          >
-            Зарегистрироваться
-          </button>
-        </div>
-      </main>
-    )
-  }
-
   if (!allowed) {
     return (
       <main className="min-h-screen bg-black text-white flex items-center justify-center p-6">
         <div className="bg-zinc-900 border border-zinc-800 rounded-3xl p-6 text-center max-w-sm">
           <div className="text-5xl mb-4">⛔</div>
           <h1 className="text-3xl font-bold mb-3">Нет доступа</h1>
-          <p className="text-zinc-400">Откройте приложение через Telegram</p>
+          <p className="text-zinc-400">Ваш аккаунт не зарегистрирован</p>
         </div>
       </main>
     )
