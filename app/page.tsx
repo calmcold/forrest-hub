@@ -17,23 +17,36 @@ export default function HomePage() {
 
   useEffect(() => {
     async function checkAccess() {
+      setLoading(true)
+
       try {
-        // 💥 FIX: защита от SSR/undefined window
-        const tg = (window as any)?.Telegram?.WebApp
+        // 🔥 SAFE TELEGRAM INIT
+        const tg =
+          typeof window !== 'undefined'
+            ? (window as any)?.Telegram?.WebApp
+            : null
+
+        tg?.ready?.()
+        tg?.expand?.()
+
         const telegramUser = tg?.initDataUnsafe?.user
 
         console.log('TG USER:', telegramUser)
 
-        if (!telegramUser) {
-          setLoading(false)
+        // ❌ если нет пользователя — стоп
+        if (!telegramUser?.id) {
           setAllowed(false)
           return
         }
 
+        // 👤 имя
         setTelegramName(
-          telegramUser.first_name || telegramUser.username || 'User'
+          telegramUser.first_name ||
+            telegramUser.username ||
+            'User'
         )
 
+        // 🧠 Supabase check
         const { data, error } = await supabase
           .from('users')
           .select('*')
@@ -44,30 +57,22 @@ export default function HomePage() {
         console.log('SUPABASE DATA:', data)
         console.log('SUPABASE ERROR:', error)
 
-        if (error) {
-          console.log('SUPABASE ERROR:', error)
+        if (error || !data) {
           setAllowed(false)
-          setLoading(false)
           return
         }
 
-        if (!data) {
-          console.log('NO USER FOUND')
-          setAllowed(false)
-          setLoading(false)
-          return
-        }
-
-        setAllowed(true)
         setUserData({
           role: data.role,
           location: data.location,
         })
 
-        setLoading(false)
+        setAllowed(true)
+
       } catch (error) {
         console.log('CATCH ERROR:', error)
         setAllowed(false)
+      } finally {
         setLoading(false)
       }
     }
@@ -92,7 +97,9 @@ export default function HomePage() {
         <div className="bg-zinc-900 border border-zinc-800 rounded-3xl p-6 text-center max-w-sm">
           <div className="text-5xl mb-4">⛔</div>
           <h1 className="text-3xl font-bold mb-3">Нет доступа</h1>
-          <p className="text-zinc-400">Ваш аккаунт не зарегистрирован</p>
+          <p className="text-zinc-400">
+            Ваш аккаунт не зарегистрирован
+          </p>
         </div>
       </main>
     )
@@ -125,12 +132,16 @@ export default function HomePage() {
       <div className="grid grid-cols-2 gap-4 mb-8">
         <div className="bg-zinc-900 border border-zinc-800 rounded-3xl p-4">
           <p className="text-zinc-500 text-sm mb-2">Роль</p>
-          <h2 className="text-2xl font-bold">{userData?.role}</h2>
+          <h2 className="text-2xl font-bold">
+            {userData?.role}
+          </h2>
         </div>
 
         <div className="bg-zinc-900 border border-zinc-800 rounded-3xl p-4">
           <p className="text-zinc-500 text-sm mb-2">Точка</p>
-          <h2 className="text-2xl font-bold">{userData?.location}</h2>
+          <h2 className="text-2xl font-bold">
+            {userData?.location}
+          </h2>
         </div>
       </div>
 
