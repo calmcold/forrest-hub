@@ -1,6 +1,8 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import Link from 'next/link'
+import { supabase } from './lib/supabase'
 
 type UserData = {
   role: string
@@ -10,65 +12,54 @@ type UserData = {
 export default function HomePage() {
   const [loading, setLoading] = useState(true)
   const [allowed, setAllowed] = useState(false)
-  const [debugInfo, setDebugInfo] = useState<string[]>([])
+  const [userData, setUserData] = useState<UserData | null>(null)
+  const [telegramName, setTelegramName] = useState('')
 
   useEffect(() => {
     async function checkAccess() {
-      const log = (msg: string) => setDebugInfo(prev => [...prev, msg])
+      setLoading(true)
 
       try {
         const tg = (window as any)?.Telegram?.WebApp
-        log('Telegram WebApp: ' + (tg ? '✅ есть' : '❌ нет'))
 
         tg?.ready?.()
         tg?.expand?.()
 
-        const user = tg?.initDataUnsafe?.user
-        log('TG User: ' + JSON.stringify(user))
+        const telegramUser = tg?.initDataUnsafe?.user
 
-        if (!user?.id) {
-          log('❌ Нет user.id')
+        if (!telegramUser?.id) {
           setAllowed(false)
           setLoading(false)
           return
         }
 
-        log('telegram_id: ' + user.id + ' тип: ' + typeof user.id)
-
-        // Динамический импорт чтобы не было ошибки с секретным ключом
-        const { supabase } = await import('./lib/supabase')
-
-        log('Ищу в базе telegram_id = ' + Number(user.id))
+        setTelegramName(
+          telegramUser.first_name ||
+          telegramUser.username ||
+          'User'
+        )
 
         const { data, error } = await supabase
           .from('users')
           .select('*')
-          .eq('telegram_id', Number(user.id))
+          .eq('telegram_id', Number(telegramUser.id))
           .eq('active', true)
           .maybeSingle()
 
-        log('data: ' + JSON.stringify(data))
-        log('error: ' + JSON.stringify(error))
-
-        if (error) {
-          log('❌ Ошибка Supabase: ' + error.message)
+        if (error || !data) {
           setAllowed(false)
           setLoading(false)
           return
         }
 
-        if (!data) {
-          log('❌ Пользователь не найден')
-          setAllowed(false)
-          setLoading(false)
-          return
-        }
+        setUserData({
+          role: data.role,
+          location: data.location,
+        })
 
-        log('✅ Доступ разрешён!')
         setAllowed(true)
 
-      } catch (err) {
-        log('💥 Ошибка: ' + err)
+      } catch (error) {
         setAllowed(false)
       } finally {
         setLoading(false)
@@ -81,21 +72,64 @@ export default function HomePage() {
   if (loading) {
     return (
       <main className="min-h-screen bg-black text-white flex items-center justify-center">
-        <p className="text-zinc-400">Загрузка...</p>
+        <div className="text-center">
+          <div className="text-5xl mb-4">🪑</div>
+          <p className="text-zinc-400">Загрузка FORREST HUB...</p>
+        </div>
+      </main>
+    )
+  }
+
+  if (!allowed) {
+    return (
+      <main className="min-h-screen bg-black text-white flex items-center justify-center p-6">
+        <div className="bg-zinc-900 border border-zinc-800 rounded-3xl p-6 text-center max-w-sm">
+          <div className="text-5xl mb-4">⛔</div>
+          <h1 className="text-3xl font-bold mb-3">Нет доступа</h1>
+          <p className="text-zinc-400">Ваш аккаунт не зарегистрирован</p>
+        </div>
       </main>
     )
   }
 
   return (
-    <main className="min-h-screen bg-black text-white p-6">
-      <h1 className="text-2xl font-bold mb-4">
-        {allowed ? '✅ ДОСТУП ЕСТЬ' : '❌ НЕТ ДОСТУПА'}
-      </h1>
+    <main className="min-h-screen bg-black text-white p-6 pb-20">
+      <div className="mb-8">
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-4xl font-black tracking-tight">FORREST HUB</h1>
+            <p className="text-zinc-400 mt-2">Добро пожаловать, {telegramName}</p>
+          </div>
+          <div className="text-5xl">🪑</div>
+        </div>
+      </div>
 
-      <div className="bg-zinc-900 rounded-xl p-4 font-mono text-xs text-green-400 space-y-1">
-        {debugInfo.map((line, i) => (
-          <div key={i}>{line}</div>
-        ))}
+      <div className="bg-zinc-900 rounded-3xl p-6 mb-6 border border-zinc-800">
+        <h2 className="text-2xl font-bold">Добро пожаловать ☕</h2>
+        <p className="text-zinc-300 text-sm mt-2">Твой карманный помощник</p>
+      </div>
+
+      <div className="grid grid-cols-2 gap-4 mb-8">
+        <div className="bg-zinc-900 border border-zinc-800 rounded-3xl p-4">
+          <p className="text-zinc-500 text-sm mb-2">Роль</p>
+          <h2 className="text-2xl font-bold">{userData?.role}</h2>
+        </div>
+        <div className="bg-zinc-900 border border-zinc-800 rounded-3xl p-4">
+          <p className="text-zinc-500 text-sm mb-2">Точка</p>
+          <h2 className="text-2xl font-bold">{userData?.location}</h2>
+        </div>
+      </div>
+
+      <div className="grid gap-4">
+        <Link href="/recipes" className="bg-zinc-900 p-5 rounded-3xl border border-zinc-800">
+          ☕ Склерозники
+        </Link>
+        <Link href="/education" className="bg-zinc-900 p-5 rounded-3xl border border-zinc-800">
+          📚 Обучение
+        </Link>
+        <Link href="/shots" className="bg-zinc-900 p-5 rounded-3xl border border-zinc-800">
+          📊 Коф Жур
+        </Link>
       </div>
     </main>
   )
