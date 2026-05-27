@@ -18,7 +18,8 @@ export default function HomePage() {
   useEffect(() => {
     async function checkAccess() {
       try {
-        const tg = window.Telegram?.WebApp
+        // 💥 FIX: защита от SSR/undefined window
+        const tg = (window as any)?.Telegram?.WebApp
         const telegramUser = tg?.initDataUnsafe?.user
 
         console.log('TG USER:', telegramUser)
