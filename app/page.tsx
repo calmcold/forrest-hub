@@ -4,116 +4,192 @@ import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { supabase } from './lib/supabase'
 
+type UserData = {
+  role: string
+  location: string
+}
+
 export default function HomePage() {
-  const [logs, setLogs] = useState<string[]>([])
   const [loading, setLoading] = useState(true)
   const [allowed, setAllowed] = useState(false)
+  const [userData, setUserData] = useState<UserData | null>(null)
+  const [telegramName, setTelegramName] = useState('')
+  const [showRegister, setShowRegister] = useState(false)
 
   useEffect(() => {
     async function checkAccess() {
-      const addLog = (msg: string) => setLogs(prev => [...prev, msg])
-      
+      setLoading(true)
+
       try {
-        // 1. Проверяем Telegram
-        addLog('🔍 Шаг 1: Проверяем Telegram...')
-        
-        const tg = (window as any)?.Telegram?.WebApp
-        addLog(`Telegram WebApp: ${tg ? '✅ есть' : '❌ нет'}`)
-        
-        if (!tg) {
-          addLog('❌ Нет Telegram WebApp. Тестируем без него...')
-          // Тестируем Supabase напрямую
+        const tg =
+          typeof window !== 'undefined'
+            ? (window as any)?.Telegram?.WebApp
+            : null
+
+        tg?.ready?.()
+        tg?.expand?.()
+
+        const telegramUser = tg?.initDataUnsafe?.user
+
+        if (!telegramUser?.id) {
+          setAllowed(false)
+          setLoading(false)
+          return
         }
-        
-        const user = tg?.initDataUnsafe?.user
-        addLog(`TG User: ${JSON.stringify(user)}`)
-        
-        // 2. Проверяем Supabase подключение
-        addLog('🔍 Шаг 2: Проверяем Supabase...')
-        
-        const { data: allUsers, error: listError } = await supabase
+
+        setTelegramName(
+          telegramUser.first_name ||
+          telegramUser.username ||
+          'User'
+        )
+
+        const { data, error } = await supabase
           .from('users')
           .select('*')
-          .limit(5)
-        
-        addLog(`Все пользователи (до 5): ${JSON.stringify(allUsers)}`)
-        if (listError) addLog(`❌ Ошибка: ${listError.message}`)
-        
-        // 3. Если есть Telegram ID, ищем пользователя
-        if (user?.id) {
-          addLog(`🔍 Шаг 3: Ищем telegram_id = ${user.id}`)
-          
-          const { data: foundUser, error: findError } = await supabase
-            .from('users')
-            .select('*')
-            .eq('telegram_id', Number(user.id))
-            .maybeSingle()
-          
-          addLog(`Найден: ${JSON.stringify(foundUser)}`)
-          if (findError) addLog(`❌ Ошибка: ${findError.message}`)
-          
-          if (foundUser?.active) {
-            addLog('✅ Доступ разрешён!')
-            setAllowed(true)
-          } else {
-            addLog('❌ Пользователь неактивен или не найден')
-          }
-        } else {
-          addLog('⚠️ Нет Telegram ID, пробуем без него...')
-          
-          // Тестовый запрос без фильтра
-          const { data: testUser } = await supabase
-            .from('users')
-            .select('*')
-            .eq('active', true)
-            .limit(1)
-            .maybeSingle()
-          
-          if (testUser) {
-            addLog('✅ Найден активный пользователь (тест)')
-            setAllowed(true)
-          }
+          .eq('telegram_id', Number(telegramUser.id))
+          .eq('active', true)
+          .maybeSingle()
+
+        if (error || !data) {
+          setAllowed(false)
+          setShowRegister(true)
+          setLoading(false)
+          return
         }
-        
+
+        setUserData({
+          role: data.role,
+          location: data.location,
+        })
+
+        setAllowed(true)
+
       } catch (error) {
-        addLog(`💥 КРИТИЧЕСКАЯ ОШИБКА: ${error}`)
+        setAllowed(false)
+        setShowRegister(true)
       } finally {
         setLoading(false)
       }
     }
-    
+
     checkAccess()
   }, [])
 
+  const handleRegister = async () => {
+    const tg = (window as any)?.Telegram?.WebApp
+    const telegramUser = tg?.initDataUnsafe?.user
+
+    if (!telegramUser?.id) return
+
+    setLoading(true)
+
+    try {
+      const { error } = await supabase
+        .from('users')
+        .insert({
+          telegram_id: Number(telegramUser.id),
+          role: 'user',
+          location: 'Не указана',
+          active: true,
+          telegram_name: telegramUser.first_name || telegramUser.username || 'User'
+        })
+
+      if (!error) {
+        setAllowed(true)
+        setShowRegister(false)
+        setUserData({
+          role: 'user',
+          location: 'Не указана',
+        })
+      }
+    } catch (err) {
+      console.error('Ошибка регистрации:', err)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  if (loading) {
+    return (
+      <main className="min-h-screen bg-black text-white flex items-center justify-center">
+        <div className="text-center">
+          <div className="text-5xl mb-4">🪑</div>
+          <p className="text-zinc-400">Загрузка FORREST HUB...</p>
+        </div>
+      </main>
+    )
+  }
+
+  if (!allowed && showRegister) {
+    return (
+      <main className="min-h-screen bg-black text-white flex items-center justify-center p-6">
+        <div className="bg-zinc-900 border border-zinc-800 rounded-3xl p-6 text-center max-w-sm w-full">
+          <div className="text-5xl mb-4">☕</div>
+          <h1 className="text-3xl font-bold mb-3">FORREST HUB</h1>
+          <p className="text-zinc-400 mb-2">Привет, {telegramName}!</p>
+          <p className="text-zinc-400 mb-6">Твой аккаунт ещё не зарегистрирован</p>
+          <button
+            onClick={handleRegister}
+            className="bg-white text-black font-bold py-3 px-6 rounded-xl w-full hover:bg-zinc-200 transition-colors"
+          >
+            Зарегистрироваться
+          </button>
+        </div>
+      </main>
+    )
+  }
+
+  if (!allowed) {
+    return (
+      <main className="min-h-screen bg-black text-white flex items-center justify-center p-6">
+        <div className="bg-zinc-900 border border-zinc-800 rounded-3xl p-6 text-center max-w-sm">
+          <div className="text-5xl mb-4">⛔</div>
+          <h1 className="text-3xl font-bold mb-3">Нет доступа</h1>
+          <p className="text-zinc-400">Откройте приложение через Telegram</p>
+        </div>
+      </main>
+    )
+  }
+
   return (
-    <main className="min-h-screen bg-black text-white p-6">
-      <h1 className="text-4xl font-black mb-6">🔧 ДИАГНОСТИКА</h1>
-      
-      <div className="bg-zinc-900 rounded-3xl p-6 mb-6 border border-zinc-800">
-        <h2 className="text-2xl font-bold mb-4">
-          Статус: {loading ? '⏳ Загрузка...' : allowed ? '✅ ДОСТУП ЕСТЬ' : '❌ НЕТ ДОСТУПА'}
-        </h2>
-        
-        <div className="bg-black rounded-xl p-4 font-mono text-sm space-y-1 max-h-96 overflow-auto">
-          {logs.map((log, i) => (
-            <div key={i} className="text-green-400">{log}</div>
-          ))}
+    <main className="min-h-screen bg-black text-white p-6 pb-20">
+      <div className="mb-8">
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-4xl font-black tracking-tight">FORREST HUB</h1>
+            <p className="text-zinc-400 mt-2">Добро пожаловать, {telegramName}</p>
+          </div>
+          <div className="text-5xl">🪑</div>
         </div>
       </div>
-      
-      {allowed && (
-        <div className="grid gap-4">
-          <Link href="/recipes" className="bg-zinc-900 p-5 rounded-3xl border border-zinc-800">
-            ☕ Склерозники
-          </Link>
-          <Link href="/education" className="bg-zinc-900 p-5 rounded-3xl border border-zinc-800">
-            📚 Обучение
-          </Link>
-          <Link href="/shots" className="bg-zinc-900 p-5 rounded-3xl border border-zinc-800">
-            📊 Коф Жур
-          </Link>
+
+      <div className="bg-zinc-900 rounded-3xl p-6 mb-6 border border-zinc-800">
+        <h2 className="text-2xl font-bold">Добро пожаловать ☕</h2>
+        <p className="text-zinc-300 text-sm mt-2">Твой карманный помощник</p>
+      </div>
+
+      <div className="grid grid-cols-2 gap-4 mb-8">
+        <div className="bg-zinc-900 border border-zinc-800 rounded-3xl p-4">
+          <p className="text-zinc-500 text-sm mb-2">Роль</p>
+          <h2 className="text-2xl font-bold">{userData?.role}</h2>
         </div>
-      )}
+        <div className="bg-zinc-900 border border-zinc-800 rounded-3xl p-4">
+          <p className="text-zinc-500 text-sm mb-2">Точка</p>
+          <h2 className="text-2xl font-bold">{userData?.location}</h2>
+        </div>
+      </div>
+
+      <div className="grid gap-4">
+        <Link href="/recipes" className="bg-zinc-900 p-5 rounded-3xl border border-zinc-800">
+          ☕ Склерозники
+        </Link>
+        <Link href="/education" className="bg-zinc-900 p-5 rounded-3xl border border-zinc-800">
+          📚 Обучение
+        </Link>
+        <Link href="/shots" className="bg-zinc-900 p-5 rounded-3xl border border-zinc-800">
+          📊 Коф Жур
+        </Link>
+      </div>
     </main>
   )
 }
